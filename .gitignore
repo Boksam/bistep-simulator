@@ -1,3 +1,26 @@
+# macOS
 .DS_Store
+
+# Virtual Environment
 /venv
-**/figures/
+
+# Generated data and reports
+/data/processed/
+/reports/
+
+# Notebooks (often contain output)
+/notebooks/
+
+# Python cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# IDE / Editor specific
+.vscode/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/

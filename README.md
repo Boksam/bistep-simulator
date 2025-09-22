@@ -1,73 +1,89 @@
-# Bistep 수온 시뮬레이션 프로젝트
+# Water Temperature Simulation and Analysis Web Application
 
-## 1. 개요
+This project is a web application that analyzes historical tide observation data (water temperature) to create a time-series model. It allows users to simulate water temperature for a specified period and visualize the results.
 
-이 프로젝트는 해양수산부 국립해양조사원(meis.go.kr)에서 제공하는 조위 데이터를 기반으로 수온을 시뮬레이션하고 분석합니다. 시계열 분석 기법을 활용하여 수온 변화를 예측하고 시각화 자료를 생성하는 것을 목표로 합니다.
+## Tech Stack
 
-## 2. 디렉토리 구조
+- **Backend**: Python, FastAPI, Pandas, Statsmodels, Matplotlib
+- **Frontend**: React, TypeScript, Vite, Recharts, Axios
+- **Package Manager**: pnpm
+
+## Project Structure
 
 ```
-bistep/
-├── assets/meis.go.kr/
-│   └── tide_*.xlsx            # 국립해양조사원 원본 조위 데이터
-├── src/
-│   ├── generate_csv.py         # 원본 데이터를 병합하고 전처리하여 CSV 파일 생성
-│   ├── requirements.txt        # 프로젝트 의존성 목록
-│   └── water_temp_simulator/
-│       ├── main.py             # 시계열 분석 및 수온 시뮬레이션 메인 스크립트
-│       ├── hourly_avg_water_temperature.csv # 전처리된 시간별 평균 수온 데이터
-│       └── figures/            # 시뮬레이션 결과 그래프 및 데이터
-├── references/                 # 개발 참고용 스크립트
-└── README.md                   # 프로젝트 설명 파일
+/
+├── backend/            # FastAPI backend server
+│   ├── app.py          # API endpoint definitions
+│   ├── plotting.py     # Chart generation for visualization
+│   ├── water_temperature.py # Water temperature simulation logic
+│   └── data/
+│       ├── raw/        # Raw data (Excel files)
+│       └── processed/  # Preprocessed data (CSV)
+├── frontend/           # React frontend application
+├── scripts/            # Data preprocessing scripts
+└── README.md
 ```
 
-- **`assets/meis.go.kr/`**: 국립해양조사원에서 다운로드한 원본 조위 데이터 (.xlsx) 파일들이 위치합니다.
-- **`src/`**: 소스 코드 디렉토리입니다.
-    - `generate_csv.py`: `assets` 폴더의 엑셀 파일들을 병합하고 전처리하여 `hourly_avg_water_temperature.csv` 파일을 생성합니다.
-    - `water_temp_simulator/main.py`: 전처리된 데이터를 바탕으로 시계열 분석 및 수온 시뮬레이션을 수행하는 메인 스크립트입니다.
-    - `water_temp_simulator/figures/`: 시뮬레이션 결과 및 분석 과정에서 생성된 그래프 이미지와 결과 파일이 저장됩니다.
-- **`references/`**: 프로젝트 개발에 참고한 코드나 초기 버전의 스크립트가 포함되어 있습니다.
+## Installation and Setup
 
-## 3. 설치 및 실행 방법
+### 1. Prerequisites
 
-### 3.1. 가상 환경 및 의존성 설치
+- **Python 3.8+** and **Node.js 18+** must be installed.
+- This project uses **pnpm** for frontend package management.
+  ```bash
+  npm install -g pnpm
+  ```
 
-프로젝트 실행을 위해 먼저 가상 환경을 활성화하고 필요한 라이브러리를 설치합니다.
+### 2. Backend Setup
+
+From the project root directory, run the following command to install the required Python packages.
 
 ```bash
-# 가상 환경 활성화 (macOS/Linux)
-source venv/bin/activate
-
-# 필요한 라이브러리 설치
-pip install -r src/requirements.txt
+pip install -r requirements.txt
 ```
 
-### 3.2. 데이터 전처리
+### 3. Frontend Setup
 
-`assets` 폴더에 있는 원본 `.xlsx` 파일들을 단일 CSV 파일로 병합하고 전처리합니다.
+Navigate to the `frontend` directory and run the following command to install the required Node.js packages.
 
 ```bash
-python src/generate_csv.py
+cd frontend
+pnpm install
 ```
 
-이 스크립트를 실행하면 `src/water_temp_simulator/` 디렉토리에 `hourly_avg_water_temperature.csv` 파일이 생성됩니다.
+### 4. Data Preprocessing
 
-### 3.3. 시뮬레이션 실행
-
-전처리된 데이터를 사용하여 수온 시뮬레이션을 실행합니다.
+Before running the simulation, you need to process the raw data into a format suitable for analysis. Run the following script **only once** from the project root directory.
 
 ```bash
-python src/water_temp_simulator/main.py
+python scripts/preprocess_tide_data.py
 ```
 
-실행이 완료되면 `src/water_temp_simulator/figures/` 디렉토리에 분석 그래프(`comparison_analysis.png`, `time_series_decomposition_improved.png`)와 시뮬레이션 결과(`simulated_water_temperature.xlsx`)가 저장됩니다.
+This script reads the Excel files from `backend/data/raw/tide/`, calculates the hourly average water temperature, and saves the result to `backend/data/processed/hourly_avg_water_temperature.csv`.
 
-## 4. 기술 스택 및 의존성
+### 5. Running the Application
 
-- Python 3.13
-- 주요 라이브러리:
-    - `pandas`: 데이터 조작 및 분석
-    - `openpyxl`: Excel 파일 읽기
-    - `statsmodels`: 시계열 분석
+#### 1. Start the Backend Server
 
-전체 의존성 목록은 `src/requirements.txt` 파일을 참고하십시오.
+In the project root directory, run the following command:
+
+```bash
+uvicorn backend.app:app --reload
+```
+
+The server will run at `http://127.0.0.1:8000`.
+
+#### 2. Start the Frontend Server
+
+Open a separate terminal, navigate to the `frontend` directory, and run the following command:
+
+```bash
+cd frontend
+pnpm run dev
+```
+
+The development server will run at `http://localhost:5173`.
+
+### 6. Usage
+
+Open your web browser and go to `http://localhost:5173`. Select the desired start and end dates, then click the "Run Simulation" button. You will see the predicted water temperature data for that period and a comparison chart with the original data.
