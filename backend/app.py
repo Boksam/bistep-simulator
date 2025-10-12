@@ -111,7 +111,7 @@ async def startup_event():
     print("\nLoading and training salinity simulator...")
     try:
         salinity_simulator = SalinitySimulator()
-        salinity_simulator.run_analysis(PROCESSED_SALINITY_PATH, trend_degree=2)
+        salinity_simulator.run_analysis(PROCESSED_SALINITY_PATH, trend_degree=0)
         simulators["salinity"] = salinity_simulator
         print("Salinity simulator loaded successfully.")
     except FileNotFoundError:
