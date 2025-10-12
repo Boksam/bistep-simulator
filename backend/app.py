@@ -96,7 +96,7 @@ async def startup_event():
     print("Loading and training water temperature simulator...")
     try:
         water_temp_simulator = WaterTemperatureSimulator()
-        water_temp_simulator.run_analysis(PROCESSED_WATER_TEMP_PATH, trend_degree=2)
+        water_temp_simulator.run_analysis(PROCESSED_WATER_TEMP_PATH, trend_degree=1)
         simulators["water_temperature"] = water_temp_simulator
         print("Water temperature simulator loaded successfully.")
     except FileNotFoundError:
