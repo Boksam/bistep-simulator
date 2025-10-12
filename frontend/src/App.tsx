@@ -78,7 +78,9 @@ function App() {
   };
 
   const getSensorDisplayName = (sensor: string) => {
-    return sensor === "water_temperature" ? "Water Temperature" : "Salinity";
+    if (sensor === "water_temperature") return "Water Temperature";
+    if (sensor === "tidal_level") return "Tidal Level";
+    return "Salinity";
   };
 
   return (
@@ -100,6 +102,7 @@ function App() {
             >
               <option value="water_temperature">Water Temperature</option>
               <option value="salinity">Salinity</option>
+              <option value="tidal_level">Tidal Level</option>
             </select>
           </div>
           <div>

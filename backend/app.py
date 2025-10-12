@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from plotting import plot_comparison, plot_decomposition
 from pydantic import BaseModel
 from salinity import SalinitySimulator
+from tidal_level import TidalLevelSimulator
 from water_temperature import WaterTemperatureSimulator
 
 PROCESSED_WATER_TEMP_PATH = os.path.join(
@@ -22,6 +23,9 @@ PROCESSED_WATER_TEMP_PATH = os.path.join(
 )
 PROCESSED_SALINITY_PATH = os.path.join(
     os.path.dirname(__file__), "data", "processed", "hourly_avg_water_salinity.csv"
+)
+PROCESSED_TIDAL_LEVEL_PATH = os.path.join(
+    os.path.dirname(__file__), "data", "processed", "hourly_avg_water_tidal_level.csv"
 )
 
 
@@ -71,7 +75,7 @@ class SimulationResponse(BaseModel):
 
 # --- Application State ---
 # A dictionary to hold our trained simulator instances
-simulators: Dict[str, WaterTemperatureSimulator | SalinitySimulator] = {}
+simulators: Dict[str, WaterTemperatureSimulator | SalinitySimulator | TidalLevelSimulator] = {}
 
 
 # --- Helper Functions ---
@@ -119,6 +123,19 @@ async def startup_event():
         print(f"Data file not found at {PROCESSED_SALINITY_PATH}.")
     except Exception as e:
         print(f"An unexpected error occurred during salinity simulator loading: {e}")
+
+    # Load and train tidal level simulator
+    print("\nLoading and training tidal level simulator...")
+    try:
+        tidal_level_simulator = TidalLevelSimulator()
+        tidal_level_simulator.run_analysis(PROCESSED_TIDAL_LEVEL_PATH, trend_degree=0)
+        simulators["tidal_level"] = tidal_level_simulator
+        print("Tidal level simulator loaded successfully.")
+    except FileNotFoundError:
+        print("ERROR: Could not load tidal level simulator.")
+        print(f"Data file not found at {PROCESSED_TIDAL_LEVEL_PATH}.")
+    except Exception as e:
+        print(f"An unexpected error occurred during tidal level simulator loading: {e}")
 
 
 # --- API Endpoints ---

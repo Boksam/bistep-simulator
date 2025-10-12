@@ -34,8 +34,8 @@ def plot_decomposition(
         axes = fig.axes
 
     # Map sensor type to display names and units
-    display_names = {"water_temperature": "Water Temperature", "salinity": "Salinity"}
-    units = {"water_temperature": "°C", "salinity": "PSU"}
+    display_names = {"water_temperature": "Water Temperature", "salinity": "Salinity", "tidal_level": "Tidal Level"}
+    units = {"water_temperature": "°C", "salinity": "PSU", "tidal_level": "cm"}
     display_name = display_names.get(sensor_type, "Value")
     unit = units.get(sensor_type, "")
 
@@ -99,8 +99,8 @@ def plot_comparison(
         axes = fig.axes
 
     # Map sensor type to display names and units
-    display_names = {"water_temperature": "Water Temperature", "salinity": "Salinity"}
-    units = {"water_temperature": "°C", "salinity": "PSU"}
+    display_names = {"water_temperature": "Water Temperature", "salinity": "Salinity", "tidal_level": "Tidal Level"}
+    units = {"water_temperature": "°C", "salinity": "PSU", "tidal_level": "cm"}
     display_name = display_names.get(sensor_type, "Value")
     unit = units.get(sensor_type, "")
 

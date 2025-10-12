@@ -24,6 +24,7 @@ FILE_PATTERN = "tide_202*.xlsx"
 DATETIME_COL = "관측일시"
 TEMPERATURE_COL = "수온"
 SALINITY_COL = "염분"
+TIDAL_LEVEL_COL = "조위"
 
 
 def find_file_paths(directory: str, pattern: str) -> list[str]:
@@ -148,6 +149,7 @@ def main():
     variables_to_process = {
         "temperature": {"col": TEMPERATURE_COL, "output_name": "temperature"},
         "salinity": {"col": SALINITY_COL, "output_name": "salinity"},
+        "tidal_level": {"col": TIDAL_LEVEL_COL, "output_name": "tidal_level"},
     }
 
     try:
