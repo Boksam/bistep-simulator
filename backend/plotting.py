@@ -14,6 +14,7 @@ from statsmodels.tsa import seasonal
 
 def plot_decomposition(
     result: seasonal.DecomposeResult,
+    sensor_type: str,
     output_dir: Optional[str] = None,
     fig: Optional[plt.Figure] = None,
 ):
@@ -23,6 +24,7 @@ def plot_decomposition(
 
     Args:
         result: A DecomposeResult object from statsmodels.
+        sensor_type: The type of sensor data being plotted.
         output_dir: Optional. The directory to save the plot image.
         fig: Optional. A matplotlib Figure to draw on.
     """
@@ -31,7 +33,13 @@ def plot_decomposition(
     else:
         axes = fig.axes
 
-    fig.suptitle("Time Series Decomposition", fontsize=18)
+    # Map sensor type to display names and units
+    display_names = {"water_temperature": "Water Temperature", "salinity": "Salinity"}
+    units = {"water_temperature": "°C", "salinity": "PSU"}
+    display_name = display_names.get(sensor_type, "Value")
+    unit = units.get(sensor_type, "")
+
+    fig.suptitle(f"{display_name} Time Series Decomposition", fontsize=18)
 
     components = {
         "Observed": result.observed,
@@ -47,7 +55,12 @@ def plot_decomposition(
             plot_kwargs.update({"linestyle": "None", "marker": "."})
 
         data.plot(ax=ax, **plot_kwargs)
-        ax.set_ylabel(name)
+
+        y_label = name
+        if name == "Observed":
+            y_label = f"{name} ({unit})"
+
+        ax.set_ylabel(y_label)
         ax.set_title(f"{name} Component", fontsize=12)
         ax.grid(True, linestyle="--", alpha=0.6)
 
@@ -65,6 +78,7 @@ def plot_decomposition(
 def plot_comparison(
     original: pd.Series,
     simulated: pd.Series,
+    sensor_type: str,
     output_dir: Optional[str] = None,
     fig: Optional[plt.Figure] = None,
 ):
@@ -75,6 +89,7 @@ def plot_comparison(
     Args:
         original: The original (historical) time series data.
         simulated: The simulated time series data.
+        sensor_type: The type of sensor data being plotted.
         output_dir: Optional. The directory to save the plot image.
         fig: Optional. A matplotlib Figure to draw on.
     """
@@ -82,6 +97,12 @@ def plot_comparison(
         fig, axes = plt.subplots(3, 1, figsize=(12, 18))
     else:
         axes = fig.axes
+
+    # Map sensor type to display names and units
+    display_names = {"water_temperature": "Water Temperature", "salinity": "Salinity"}
+    units = {"water_temperature": "°C", "salinity": "PSU"}
+    display_name = display_names.get(sensor_type, "Value")
+    unit = units.get(sensor_type, "")
 
     # --- Filter historical data to match the simulation's seasonal range ---
     simulated_doy = simulated.index.dayofyear
@@ -117,7 +138,7 @@ def plot_comparison(
         density=True,
     )
     ax1.set_title("Distribution Comparison", fontsize=14)
-    ax1.set_xlabel("Water Temperature (°C)")
+    ax1.set_xlabel(f"{display_name} ({unit})")
     ax1.legend()
     ax1.grid(True, alpha=0.3)
 
@@ -152,7 +173,7 @@ def plot_comparison(
     )
     ax2.set_title("Seasonal Profile Comparison (by Day of Year)", fontsize=14)
     ax2.set_xlabel("Day of Year")
-    ax2.set_ylabel("Avg. Temperature (°C)")
+    ax2.set_ylabel(f"Avg. {display_name} ({unit})")
     ax2.legend()
     ax2.grid(True, alpha=0.3)
 
@@ -187,7 +208,7 @@ def plot_comparison(
     )
     ax3.set_title("Daily Profile Comparison (by Hour of Day)", fontsize=14)
     ax3.set_xlabel("Hour of Day (0-23)")
-    ax3.set_ylabel("Avg. Temperature (°C)")
+    ax3.set_ylabel(f"Avg. {display_name} ({unit})")
     ax3.legend()
     ax3.grid(True, alpha=0.3)
 

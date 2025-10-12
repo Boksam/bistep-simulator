@@ -14,11 +14,16 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from plotting import plot_comparison, plot_decomposition
 from pydantic import BaseModel
+from salinity import SalinitySimulator
 from water_temperature import WaterTemperatureSimulator
 
-PROCESSED_DATA_PATH = os.path.join(
+PROCESSED_WATER_TEMP_PATH = os.path.join(
     os.path.dirname(__file__), "data", "processed", "hourly_avg_water_temperature.csv"
 )
+PROCESSED_SALINITY_PATH = os.path.join(
+    os.path.dirname(__file__), "data", "processed", "hourly_avg_water_salinity.csv"
+)
+
 
 # Create a FastAPI app instance
 app = FastAPI(
@@ -66,7 +71,7 @@ class SimulationResponse(BaseModel):
 
 # --- Application State ---
 # A dictionary to hold our trained simulator instances
-simulators: Dict[str, WaterTemperatureSimulator] = {}
+simulators: Dict[str, WaterTemperatureSimulator | SalinitySimulator] = {}
 
 
 # --- Helper Functions ---
@@ -86,17 +91,34 @@ async def startup_event():
     Loads and trains simulation models to avoid re-training on every API call.
     """
     print("Server is starting up...")
+
+    # Load and train water temperature simulator
     print("Loading and training water temperature simulator...")
     try:
         water_temp_simulator = WaterTemperatureSimulator()
-        water_temp_simulator.run_analysis(PROCESSED_DATA_PATH, trend_degree=2)
+        water_temp_simulator.run_analysis(PROCESSED_WATER_TEMP_PATH, trend_degree=2)
         simulators["water_temperature"] = water_temp_simulator
         print("Water temperature simulator loaded successfully.")
     except FileNotFoundError:
         print("ERROR: Could not load water temperature simulator.")
-        print(f"Data file not found at {PROCESSED_DATA_PATH}.")
+        print(f"Data file not found at {PROCESSED_WATER_TEMP_PATH}.")
     except Exception as e:
-        print(f"An unexpected error occurred during simulator loading: {e}")
+        print(
+            f"An unexpected error occurred during water temperature simulator loading: {e}"
+        )
+
+    # Load and train salinity simulator
+    print("\nLoading and training salinity simulator...")
+    try:
+        salinity_simulator = SalinitySimulator()
+        salinity_simulator.run_analysis(PROCESSED_SALINITY_PATH, trend_degree=2)
+        simulators["salinity"] = salinity_simulator
+        print("Salinity simulator loaded successfully.")
+    except FileNotFoundError:
+        print("ERROR: Could not load salinity simulator.")
+        print(f"Data file not found at {PROCESSED_SALINITY_PATH}.")
+    except Exception as e:
+        print(f"An unexpected error occurred during salinity simulator loading: {e}")
 
 
 # --- API Endpoints ---
@@ -144,7 +166,9 @@ async def run_simulation(sensor_name: str, request: SimulationRequest):
     # Decomposition Plot
     if simulator.full_decomposition_result:
         fig_decomp, _ = plt.subplots(4, 1, figsize=(10, 8), sharex=True)
-        plot_decomposition(simulator.full_decomposition_result, fig=fig_decomp)
+        plot_decomposition(
+            simulator.full_decomposition_result, sensor_type=sensor_name, fig=fig_decomp
+        )
         b64_decomposition = fig_to_base64(fig_decomp)
     else:
         b64_decomposition = ""
@@ -152,7 +176,9 @@ async def run_simulation(sensor_name: str, request: SimulationRequest):
     # Comparison Plot
     original_series = simulator.original_data
     fig_comp, _ = plt.subplots(3, 1, figsize=(12, 18))
-    plot_comparison(original_series, simulated_series, fig=fig_comp)
+    plot_comparison(
+        original_series, simulated_series, sensor_type=sensor_name, fig=fig_comp
+    )
     b64_comparison = fig_to_base64(fig_comp)
 
     print("Simulation and plot generation complete.")

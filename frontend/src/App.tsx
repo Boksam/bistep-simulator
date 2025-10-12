@@ -24,6 +24,7 @@ interface Plots {
 }
 
 function App() {
+  const [sensorType, setSensorType] = useState("water_temperature");
   const [startDate, setStartDate] = useState("2025-01-01");
   const [endDate, setEndDate] = useState("2025-01-31");
   const [simulationData, setSimulationData] = useState<SimulationDataPoint[]>(
@@ -41,7 +42,7 @@ function App() {
 
     try {
       const response = await axios.post(
-        `${import.meta.env.VITE_API_BASE_URL}/simulations/water_temperature`,
+        `${import.meta.env.VITE_API_BASE_URL}/simulations/${sensorType}`,
         {
           start_date: startDate,
           end_date: endDate,
@@ -67,10 +68,17 @@ function App() {
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
-    link.setAttribute("download", `simulation_${startDate}_to_${endDate}.csv`);
+    link.setAttribute(
+      "download",
+      `${sensorType}_simulation_${startDate}_to_${endDate}.csv`,
+    );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const getSensorDisplayName = (sensor: string) => {
+    return sensor === "water_temperature" ? "Water Temperature" : "Salinity";
   };
 
   return (
@@ -82,7 +90,18 @@ function App() {
 
       <div className="controls card">
         <h2>Configuration</h2>
-        <div className="date-picker">
+        <div className="control-grid">
+          <div>
+            <label htmlFor="sensor-type">Sensor Type</label>
+            <select
+              id="sensor-type"
+              value={sensorType}
+              onChange={(e) => setSensorType(e.target.value)}
+            >
+              <option value="water_temperature">Water Temperature</option>
+              <option value="salinity">Salinity</option>
+            </select>
+          </div>
           <div>
             <label htmlFor="start-date">Start Date</label>
             <input
@@ -123,7 +142,7 @@ function App() {
         <div className="results-container">
           <div className="card">
             <div className="card-header">
-              <h2>Simulation Results</h2>
+              <h2>{getSensorDisplayName(sensorType)} Simulation Results</h2>
               <button onClick={handleDownloadCSV}>Download CSV</button>
             </div>
             <div className="chart-container">
@@ -140,7 +159,7 @@ function App() {
                   <Line
                     type="monotone"
                     dataKey="value"
-                    name="Simulated Temperature"
+                    name={`Simulated ${getSensorDisplayName(sensorType)}`}
                     stroke="#8884d8"
                     dot={false}
                   />
