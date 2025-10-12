@@ -6,17 +6,32 @@ import base64
 import io
 import os
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import matplotlib.pyplot as plt
 import pandas as pd
+import yaml
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pandas import Timedelta
 from plotting import plot_comparison, plot_decomposition
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from salinity import SalinitySimulator
 from tidal_level import TidalLevelSimulator
 from water_temperature import WaterTemperatureSimulator
+
+# --- Configuration Loading ---
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
+try:
+    with open(CONFIG_PATH, "r") as f:
+        config = yaml.safe_load(f)
+except FileNotFoundError:
+    print(f"Warning: '{CONFIG_PATH}' not found. Using default configurations.")
+    config = {}
+except yaml.YAMLError as e:
+    print(f"Warning: Error parsing '{CONFIG_PATH}': {e}. Using default configurations.")
+    config = {}
+
 
 PROCESSED_WATER_TEMP_PATH = os.path.join(
     os.path.dirname(__file__), "data", "processed", "hourly_avg_water_temperature.csv"
@@ -37,9 +52,8 @@ app = FastAPI(
 )
 
 # --- CORS Middleware ---
-# Allow requests from our frontend development server
 origins = [
-    "http://localhost:5173",  # Vite default port
+    "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
 app.add_middleware(
@@ -57,6 +71,10 @@ class SimulationRequest(BaseModel):
 
     start_date: str
     end_date: str
+    interval: Optional[str] = Field(
+        "1h",
+        description="Data aggregation interval (e.g., '1h', '12h', '1d', '7d').",
+    )
 
 
 class PlotResponse(BaseModel):
@@ -74,7 +92,6 @@ class SimulationResponse(BaseModel):
 
 
 # --- Application State ---
-# A dictionary to hold our trained simulator instances
 simulators: Dict[str, WaterTemperatureSimulator | SalinitySimulator | TidalLevelSimulator] = {}
 
 
@@ -87,13 +104,21 @@ def fig_to_base64(fig) -> str:
     return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("utf-8")
 
 
+def parse_interval(interval_str: str) -> Timedelta:
+    """Parses a human-readable interval string into a pandas Timedelta object."""
+    try:
+        return pd.to_timedelta(interval_str)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid interval format: '{interval_str}'. Use formats like '1h', '12h', '1d'.",
+        )
+
+
 # --- Events ---
 @app.on_event("startup")
 async def startup_event():
-    """Event handler for server startup.
-
-    Loads and trains simulation models to avoid re-training on every API call.
-    """
+    """Loads and trains simulation models to avoid re-training on every API call."""
     print("Server is starting up...")
 
     # Load and train water temperature simulator
@@ -104,12 +129,9 @@ async def startup_event():
         simulators["water_temperature"] = water_temp_simulator
         print("Water temperature simulator loaded successfully.")
     except FileNotFoundError:
-        print("ERROR: Could not load water temperature simulator.")
-        print(f"Data file not found at {PROCESSED_WATER_TEMP_PATH}.")
+        print(f"ERROR: Could not load water temperature simulator. Data file not found at {PROCESSED_WATER_TEMP_PATH}.")
     except Exception as e:
-        print(
-            f"An unexpected error occurred during water temperature simulator loading: {e}"
-        )
+        print(f"An unexpected error occurred during water temperature simulator loading: {e}")
 
     # Load and train salinity simulator
     print("\nLoading and training salinity simulator...")
@@ -119,8 +141,7 @@ async def startup_event():
         simulators["salinity"] = salinity_simulator
         print("Salinity simulator loaded successfully.")
     except FileNotFoundError:
-        print("ERROR: Could not load salinity simulator.")
-        print(f"Data file not found at {PROCESSED_SALINITY_PATH}.")
+        print(f"ERROR: Could not load salinity simulator. Data file not found at {PROCESSED_SALINITY_PATH}.")
     except Exception as e:
         print(f"An unexpected error occurred during salinity simulator loading: {e}")
 
@@ -132,8 +153,7 @@ async def startup_event():
         simulators["tidal_level"] = tidal_level_simulator
         print("Tidal level simulator loaded successfully.")
     except FileNotFoundError:
-        print("ERROR: Could not load tidal level simulator.")
-        print(f"Data file not found at {PROCESSED_TIDAL_LEVEL_PATH}.")
+        print(f"ERROR: Could not load tidal level simulator. Data file not found at {PROCESSED_TIDAL_LEVEL_PATH}.")
     except Exception as e:
         print(f"An unexpected error occurred during tidal level simulator loading: {e}")
 
@@ -166,21 +186,42 @@ async def run_simulation(sensor_name: str, request: SimulationRequest):
             status_code=400, detail="Invalid date format. Please use YYYY-MM-DD."
         )
 
+    # Validate and parse the interval
+    requested_interval_td = parse_interval(request.interval)
+
+    # Get simulator-specific minimum interval from config, with a fallback
+    min_interval_str = (
+        config.get("simulators", {}).get(sensor_name, {}).get("min_interval", "1h")
+    )
+    min_interval_td = parse_interval(min_interval_str)
+
+    if requested_interval_td < min_interval_td:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Interval for '{sensor_name}' cannot be less than its minimum of {min_interval_str}.",
+        )
+
     simulator = simulators[sensor_name]
     print(
-        f"Generating simulation for '{sensor_name}' from {request.start_date} to {request.end_date}..."
+        f"Generating simulation for '{sensor_name}' from {request.start_date} to {request.end_date} with interval {request.interval}..."
     )
 
-    # 1. Generate simulated data
+    # 1. Generate simulated data at the requested interval
     simulated_series = simulator.simulate(
-        start_date=request.start_date, end_date=request.end_date
+        start_date=request.start_date,
+        end_date=request.end_date,
+        freq=request.interval,  # Pass the interval string directly
     )
+
+    # 2. Resample original data for the comparison plot
+    original_series = simulator.original_data.resample(requested_interval_td).mean()
+
     result_df = simulated_series.reset_index()
     result_df.columns = ["timestamp", "value"]
     json_data = result_df.to_dict(orient="records")
 
-    # 2. Generate plots in memory
-    # Decomposition Plot
+    # 3. Generate plots in memory
+    # Decomposition Plot (on original hourly data)
     if simulator.full_decomposition_result:
         fig_decomp, _ = plt.subplots(4, 1, figsize=(10, 8), sharex=True)
         plot_decomposition(
@@ -190,8 +231,7 @@ async def run_simulation(sensor_name: str, request: SimulationRequest):
     else:
         b64_decomposition = ""
 
-    # Comparison Plot
-    original_series = simulator.original_data
+    # Comparison Plot (on resampled data)
     fig_comp, _ = plt.subplots(3, 1, figsize=(12, 18))
     plot_comparison(
         original_series, simulated_series, sensor_type=sensor_name, fig=fig_comp

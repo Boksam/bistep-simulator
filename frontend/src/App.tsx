@@ -23,10 +23,21 @@ interface Plots {
   comparison: string;
 }
 
+// --- Constants ---
+const intervalOptions = [
+  { value: "1h", label: "1 Hour" },
+  { value: "12h", label: "12 Hours" },
+  { value: "1d", label: "1 Day" },
+  { value: "3d", label: "3 Days" },
+  { value: "7d", label: "7 Days" },
+  { value: "30d", label: "30 Days" },
+];
+
 function App() {
   const [sensorType, setSensorType] = useState("water_temperature");
   const [startDate, setStartDate] = useState("2025-01-01");
   const [endDate, setEndDate] = useState("2025-01-31");
+  const [interval, setInterval] = useState(intervalOptions[0].value);
   const [simulationData, setSimulationData] = useState<SimulationDataPoint[]>(
     [],
   );
@@ -46,6 +57,7 @@ function App() {
         {
           start_date: startDate,
           end_date: endDate,
+          interval: interval,
         },
       );
       setSimulationData(response.data.simulation_data);
@@ -70,7 +82,7 @@ function App() {
     link.setAttribute("href", url);
     link.setAttribute(
       "download",
-      `${sensorType}_simulation_${startDate}_to_${endDate}.csv`,
+      `${sensorType}_${interval}_simulation_${startDate}_to_${endDate}.csv`,
     );
     document.body.appendChild(link);
     link.click();
@@ -122,6 +134,20 @@ function App() {
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
             />
+          </div>
+          <div>
+            <label htmlFor="interval">Interval</label>
+            <select
+              id="interval"
+              value={interval}
+              onChange={(e) => setInterval(e.target.value)}
+            >
+              {intervalOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
         <button onClick={handleRunSimulation} disabled={loading}>
@@ -196,4 +222,3 @@ function App() {
 }
 
 export default App;
-

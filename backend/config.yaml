@@ -1,0 +1,8 @@
+# Supported interval options: '1h', '12h', '1d', '3d', '7d', '30d'
+simulators:
+  water_temperature:
+    min_interval: '1h'
+  salinity:
+    min_interval: '1h'
+  tidal_level:
+    min_interval: '1h'
