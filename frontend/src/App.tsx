@@ -101,7 +101,6 @@ function App() {
         <h1>BISTEP Sensor Data Simulator</h1>
         <p>Generate and visualize synthetic time-series data.</p>
       </header>
-
       <div className="controls card">
         <h2>Configuration</h2>
         <div className="control-grid">
@@ -154,19 +153,16 @@ function App() {
           {loading ? "Generating..." : "Run Simulation"}
         </button>
       </div>
-
       {error && (
         <div className="card error-card">
           <strong>Error:</strong> {error}
         </div>
       )}
-
       {loading && (
         <div className="card loading-card">
           Loading data and generating plots...
         </div>
       )}
-
       {simulationData.length > 0 && (
         <div className="results-container">
           <div className="card">
