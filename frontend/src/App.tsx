@@ -11,6 +11,8 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import Papa from "papaparse";
+import "katex/dist/katex.min.css";
+import { BlockMath } from "react-katex";
 
 // --- TypeScript Interfaces ---
 interface SimulationDataPoint {
@@ -37,34 +39,69 @@ function App() {
   const [sensorType, setSensorType] = useState("water_temperature");
   const [startDate, setStartDate] = useState("2025-01-01");
   const [endDate, setEndDate] = useState("2025-01-31");
-  const [interval, setInterval] = useState(intervalOptions[0].value);
+  const [interval, setInterval] = useState(intervalOptions[2].value); // Default to 1 Day
   const [simulationData, setSimulationData] = useState<SimulationDataPoint[]>(
     [],
   );
   const [plots, setPlots] = useState<Plots | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [formula, setFormula] = useState<string | null>(null);
+
+  // Anode Lifetime specific parameters
+  const [anodeConstantDuration, setAnodeConstantDuration] = useState(24 * 30 * 6); // 6 months in hours
+  const [anodeDecayRate, setAnodeDecayRate] = useState(0.001);
+  const [anodeNoiseLevel, setAnodeNoiseLevel] = useState(0.01);
 
   const handleRunSimulation = async () => {
     setLoading(true);
     setError(null);
     setSimulationData([]);
     setPlots(null);
+    setFormula(null);
 
     try {
-      const response = await axios.post(
-        `${import.meta.env.VITE_API_BASE_URL}/simulations/${sensorType}`,
-        {
-          start_date: startDate,
-          end_date: endDate,
-          interval: interval,
-        },
-      );
-      setSimulationData(response.data.simulation_data);
-      setPlots(response.data.plots);
+      let response;
+      if (sensorType === "anode_lifetime") {
+        response = await axios.post(
+          `${import.meta.env.VITE_API_BASE_URL}/simulations/anode-lifetime`,
+          {
+            start_date: startDate,
+            end_date: endDate,
+            interval: interval,
+            constant_duration: anodeConstantDuration,
+            decay_rate: anodeDecayRate,
+            noise_level: anodeNoiseLevel,
+          },
+        );
+        setSimulationData(response.data.simulation_data);
+        setFormula(response.data.formula);
+        setPlots(null); // Anode lifetime does not have plots
+      } else {
+        response = await axios.post(
+          `${import.meta.env.VITE_API_BASE_URL}/simulations/${sensorType}`,
+          {
+            start_date: startDate,
+            end_date: endDate,
+            interval: interval,
+          },
+        );
+        setSimulationData(response.data.simulation_data);
+        setPlots(response.data.plots);
+      }
     } catch (err) {
-      if (axios.isAxiosError(err)) {
-        setError(err.response?.data?.detail || "An unknown error occurred.");
+      if (axios.isAxiosError(err) && err.response) {
+        const detail = err.response.data.detail;
+        if (typeof detail === "string") {
+          setError(detail);
+        } else if (Array.isArray(detail)) {
+          const errorString = detail
+            .map((d) => `[${d.loc.join(" -> ")}]: ${d.msg}`)
+            .join("; ");
+          setError(errorString);
+        } else {
+          setError(JSON.stringify(err.response.data));
+        }
       } else {
         setError("An unexpected error occurred.");
       }
@@ -92,6 +129,7 @@ function App() {
   const getSensorDisplayName = (sensor: string) => {
     if (sensor === "water_temperature") return "Water Temperature";
     if (sensor === "tidal_level") return "Tidal Level";
+    if (sensor === "anode_lifetime") return "Anode Lifetime";
     return "Salinity";
   };
 
@@ -114,6 +152,7 @@ function App() {
               <option value="water_temperature">Water Temperature</option>
               <option value="salinity">Salinity</option>
               <option value="tidal_level">Tidal Level</option>
+              <option value="anode_lifetime">Anode Lifetime</option>
             </select>
           </div>
           <div>
@@ -149,6 +188,56 @@ function App() {
             </select>
           </div>
         </div>
+
+        {sensorType === "anode_lifetime" && (
+          <div className="anode-controls">
+            <h3>Anode Lifetime Parameters</h3>
+            <div className="control-grid">
+              <div>
+                <label htmlFor="constant-duration">
+                  Constant Duration (months):{" "}
+                  {Math.round(anodeConstantDuration / (24 * 30))}
+                </label>
+                <input
+                  id="constant-duration"
+                  type="range"
+                  min="0"
+                  max={24 * 365 * 3} // 3 years in hours
+                  step={24 * 30} // 1 month steps
+                  value={anodeConstantDuration}
+                  onChange={(e) =>
+                    setAnodeConstantDuration(Number(e.target.value))
+                  }
+                />
+              </div>
+              <div>
+                <label htmlFor="decay-rate">Decay Rate: {anodeDecayRate}</label>
+                <input
+                  id="decay-rate"
+                  type="range"
+                  min="0.0001"
+                  max="0.01"
+                  step="0.0001"
+                  value={anodeDecayRate}
+                  onChange={(e) => setAnodeDecayRate(Number(e.target.value))}
+                />
+              </div>
+              <div>
+                <label htmlFor="noise-level">Noise Level: {anodeNoiseLevel}</label>
+                <input
+                  id="noise-level"
+                  type="range"
+                  min="0"
+                  max="0.1"
+                  step="0.005"
+                  value={anodeNoiseLevel}
+                  onChange={(e) => setAnodeNoiseLevel(Number(e.target.value))}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
         <button onClick={handleRunSimulation} disabled={loading}>
           {loading ? "Generating..." : "Run Simulation"}
         </button>
@@ -165,6 +254,12 @@ function App() {
       )}
       {simulationData.length > 0 && (
         <div className="results-container">
+          {formula && (
+            <div className="card">
+              <h2>Simulation Formula</h2>
+              <BlockMath math={formula} />
+            </div>
+          )}
           <div className="card">
             <div className="card-header">
               <h2>{getSensorDisplayName(sensorType)} Simulation Results</h2>
