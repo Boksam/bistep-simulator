@@ -1,0 +1,52 @@
+{
+  "app": {
+    "title": "BISTEP 센서 데이터 시뮬레이터",
+    "description": "시계열 합성 데이터를 생성하고 시각화합니다."
+  },
+  "configuration": {
+    "title": "설정",
+    "sensorType": "센서 유형",
+    "startDate": "시작 날짜",
+    "endDate": "종료 날짜",
+    "interval": "간격"
+  },
+  "sensorTypes": {
+    "water_temperature": "수온",
+    "salinity": "염분",
+    "tidal_level": "조위",
+    "anode_lifetime": "양극 수명"
+  },
+  "intervals": {
+    "1h": "1시간",
+    "12h": "12시간",
+    "1d": "1일",
+    "3d": "3일",
+    "7d": "7일",
+    "30d": "30일"
+  },
+  "anodeLifetime": {
+    "title": "양극 수명 매개변수",
+    "constantDuration": "일정 지속 기간 (월)",
+    "decayRate": "감쇠율",
+    "noiseLevel": "노이즈 수준"
+  },
+  "buttons": {
+    "runSimulation": "시뮬레이션 실행",
+    "generating": "생성 중...",
+    "downloadCSV": "CSV 다운로드"
+  },
+  "messages": {
+    "error": "오류",
+    "loading": "데이터를 로딩하고 플롯을 생성하는 중...",
+    "unexpectedError": "예상치 못한 오류가 발생했습니다."
+  },
+  "results": {
+    "simulationFormula": "시뮬레이션 수식",
+    "simulationResults": "시뮬레이션 결과",
+    "comparisonAnalysis": "비교 분석",
+    "comparisonAlt": "원본 데이터와 시뮬레이션 데이터 비교",
+    "decomposition": "시계열 분해",
+    "decompositionAlt": "시계열 분해 플롯",
+    "simulated": "시뮬레이션된"
+  }
+}

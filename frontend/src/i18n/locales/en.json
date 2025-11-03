@@ -1,0 +1,52 @@
+{
+  "app": {
+    "title": "BISTEP Sensor Data Simulator",
+    "description": "Generate and visualize synthetic time-series data."
+  },
+  "configuration": {
+    "title": "Configuration",
+    "sensorType": "Sensor Type",
+    "startDate": "Start Date",
+    "endDate": "End Date",
+    "interval": "Interval"
+  },
+  "sensorTypes": {
+    "water_temperature": "Water Temperature",
+    "salinity": "Salinity",
+    "tidal_level": "Tidal Level",
+    "anode_lifetime": "Anode Lifetime"
+  },
+  "intervals": {
+    "1h": "1 Hour",
+    "12h": "12 Hours",
+    "1d": "1 Day",
+    "3d": "3 Days",
+    "7d": "7 Days",
+    "30d": "30 Days"
+  },
+  "anodeLifetime": {
+    "title": "Anode Lifetime Parameters",
+    "constantDuration": "Constant Duration (months)",
+    "decayRate": "Decay Rate",
+    "noiseLevel": "Noise Level"
+  },
+  "buttons": {
+    "runSimulation": "Run Simulation",
+    "generating": "Generating...",
+    "downloadCSV": "Download CSV"
+  },
+  "messages": {
+    "error": "Error",
+    "loading": "Loading data and generating plots...",
+    "unexpectedError": "An unexpected error occurred."
+  },
+  "results": {
+    "simulationFormula": "Simulation Formula",
+    "simulationResults": "Simulation Results",
+    "comparisonAnalysis": "Comparison Analysis",
+    "comparisonAlt": "Comparison of original vs. simulated data",
+    "decomposition": "Time Series Decomposition",
+    "decompositionAlt": "Time series decomposition plot",
+    "simulated": "Simulated"
+  }
+}
