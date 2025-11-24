@@ -10,11 +10,35 @@
     "endDate": "End Date",
     "interval": "Interval"
   },
+  "mode": {
+    "historical": "Historical Data",
+    "synthetic": "Artificial Data"
+  },
+  "synthetic": {
+    "patternType": "Pattern Type",
+    "patterns": {
+      "polynomial": "Polynomial (Trend)",
+      "exponential": "Exponential (Growth/Decay)",
+      "step": "Step Function (Sigmoid)"
+    },
+    "degree": "Degree",
+    "coefficients": "Coefficients",
+    "noiseLevel": "Noise Level (Std Dev)",
+    "params": {
+      "scale": "Scale",
+      "rate": "Rate",
+      "offset": "Offset",
+      "min_val": "Min Value",
+      "max_val": "Max Value",
+      "step_position": "Step Position",
+      "transition_speed": "Transition Speed"
+    }
+  },
   "sensorTypes": {
     "water_temperature": "Water Temperature",
     "salinity": "Salinity",
     "tidal_level": "Tidal Level",
-    "anode_lifetime": "Anode Lifetime"
+    "anode_lifetime": "Anode Voltage"
   },
   "intervals": {
     "1h": "1 Hour",
@@ -25,7 +49,7 @@
     "30d": "30 Days"
   },
   "anodeLifetime": {
-    "title": "Anode Lifetime Parameters",
+    "title": "Anode Voltage Parameters",
     "constantDuration": "Constant Duration (months)",
     "decayRate": "Decay Rate",
     "noiseLevel": "Noise Level"
@@ -47,6 +71,40 @@
     "comparisonAlt": "Comparison of original vs. simulated data",
     "decomposition": "Time Series Decomposition",
     "decompositionAlt": "Time series decomposition plot",
-    "simulated": "Simulated"
+    "simulated": "Simulated",
+    "modelParameters": "Model Parameters",
+    "trendCoefficients": "Trend Coefficients",
+    "noiseStd": "Noise Std Dev",
+    "seasonalityStrength": "Seasonality Strength",
+    "trendCoefficientsTooltip": "Coefficients of the polynomial trend line fitted to the data.",
+    "noiseStdTooltip": "Standard deviation of the residual noise after removing trend and seasonality.",
+    "seasonalityStrengthTooltip": "Relative strength of the seasonal component compared to the residual noise."
+  },
+  "tuning": {
+    "title": "Parameter Tuning",
+    "trendMultiplier": "Trend Multiplier",
+    "trendOffset": "Trend Offset",
+    "seasonalityMultiplier": "Seasonality Multiplier",
+    "noiseMultiplier": "Noise Multiplier",
+    "updateSimulation": "Update Simulation"
+  },
+  "steps": {
+    "configuration": "1. Configuration",
+    "analysis": "2. Analysis & Tuning"
+  },
+  "tooltips": {
+    "trendMultiplier": "Adjusts the magnitude of the long-term trend component. Values > 1.0 increase the trend's slope/impact.",
+    "trendOffset": "Adds a constant value to the entire dataset. Useful for shifting the baseline.",
+    "seasonalityMultiplier": "Amplifies (> 1.0) or dampens (< 1.0) the periodic patterns (daily/yearly).",
+    "noiseMultiplier": "Increases (> 1.0) or decreases (< 1.0) the random fluctuations (noise).",
+    "trendCoefficients": "Coefficients of the polynomial trend line fitted to the data.",
+    "noiseStd": "Standard deviation of the residual noise after removing trend and seasonality.",
+    "seasonalityStrength": "The difference between the maximum and minimum values of the seasonal component."
+  },
+  "units": {
+    "water_temperature": "°C",
+    "salinity": "PSU",
+    "tidal_level": "cm",
+    "anode_lifetime": "V"
   }
 }

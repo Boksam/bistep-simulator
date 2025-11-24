@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import axios from "axios";
 import {
@@ -15,6 +15,7 @@ import Papa from "papaparse";
 import "katex/dist/katex.min.css";
 import { BlockMath } from "react-katex";
 import LanguageSwitcher from "./components/LanguageSwitcher";
+import InfoTooltip from "./components/InfoTooltip";
 
 // --- TypeScript Interfaces ---
 interface SimulationDataPoint {
@@ -25,6 +26,13 @@ interface SimulationDataPoint {
 interface Plots {
   decomposition: string;
   comparison: string;
+}
+
+interface ModelParameters {
+  trend_coefficients?: number[];
+  noise_std?: number;
+  noise_type?: string;
+  seasonality_strength?: number;
 }
 
 // --- Constants ---
@@ -47,9 +55,42 @@ function App() {
     []
   );
   const [plots, setPlots] = useState<Plots | null>(null);
+  const [modelParameters, setModelParameters] =
+    useState<ModelParameters | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formula, setFormula] = useState<string | null>(null);
+
+  // Synthetic Generator State
+  const [mode, setMode] = useState<"historical" | "synthetic">("historical");
+  const [patternType, setPatternType] = useState("polynomial");
+  const [polyDegree, setPolyDegree] = useState(1);
+  const [polyCoeffs, setPolyCoeffs] = useState<number[]>([0, 1]);
+  const [expParams, setExpParams] = useState({
+    scale: 1.0,
+    rate: 0.5,
+    offset: 0.0,
+  });
+  const [stepParams, setStepParams] = useState({
+    min_val: 0,
+    max_val: 10,
+    step_position: 5.0,
+    transition_speed: 2.0,
+  });
+  const [noiseStd, setNoiseStd] = useState(0.0);
+
+  // Update poly coeffs when degree changes
+  useEffect(() => {
+    if (polyCoeffs.length !== polyDegree + 1) {
+      const newCoeffs = new Array(polyDegree + 1).fill(0);
+      for (let i = 0; i < Math.min(newCoeffs.length, polyCoeffs.length); i++) {
+        newCoeffs[newCoeffs.length - 1 - i] =
+          polyCoeffs[polyCoeffs.length - 1 - i];
+      }
+      setPolyCoeffs(newCoeffs);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [polyDegree]);
 
   // Anode Lifetime specific parameters
   const [anodeConstantDuration, setAnodeConstantDuration] = useState(
@@ -63,36 +104,62 @@ function App() {
     setError(null);
     setSimulationData([]);
     setPlots(null);
+    setModelParameters(null);
     setFormula(null);
 
     try {
       let response;
-      if (sensorType === "anode_lifetime") {
+      if (mode === "synthetic") {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let params: any = { noise_std: noiseStd };
+        if (patternType === "polynomial") {
+          params.coefficients = polyCoeffs;
+        } else if (patternType === "exponential") {
+          params = { ...params, ...expParams };
+        } else if (patternType === "step") {
+          params = { ...params, ...stepParams };
+        }
+
         response = await axios.post(
-          `${import.meta.env.VITE_API_BASE_URL}/simulations/anode-lifetime`,
+          `${import.meta.env.VITE_API_BASE_URL}/generate-synthetic`,
           {
+            pattern_type: patternType,
+            parameters: params,
             start_date: startDate,
             end_date: endDate,
             interval: interval,
-            constant_duration: anodeConstantDuration,
-            decay_rate: anodeDecayRate,
-            noise_level: anodeNoiseLevel,
           }
         );
-        setSimulationData(response.data.simulation_data);
-        setFormula(response.data.formula);
-        setPlots(null); // Anode lifetime does not have plots
+        setSimulationData(response.data);
       } else {
-        response = await axios.post(
-          `${import.meta.env.VITE_API_BASE_URL}/simulations/${sensorType}`,
-          {
-            start_date: startDate,
-            end_date: endDate,
-            interval: interval,
-          }
-        );
-        setSimulationData(response.data.simulation_data);
-        setPlots(response.data.plots);
+        if (sensorType === "anode_lifetime") {
+          response = await axios.post(
+            `${import.meta.env.VITE_API_BASE_URL}/simulations/anode-lifetime`,
+            {
+              start_date: startDate,
+              end_date: endDate,
+              interval: interval,
+              constant_duration: anodeConstantDuration,
+              decay_rate: anodeDecayRate,
+              noise_level: anodeNoiseLevel,
+            }
+          );
+          setSimulationData(response.data.simulation_data);
+          setFormula(response.data.formula);
+          setPlots(null); // Anode lifetime does not have plots
+        } else {
+          response = await axios.post(
+            `${import.meta.env.VITE_API_BASE_URL}/simulations/${sensorType}`,
+            {
+              start_date: startDate,
+              end_date: endDate,
+              interval: interval,
+            }
+          );
+          setSimulationData(response.data.simulation_data);
+          setPlots(response.data.plots);
+          setModelParameters(response.data.model_parameters);
+        }
       }
     } catch (err) {
       if (axios.isAxiosError(err) && err.response) {
@@ -115,6 +182,28 @@ function App() {
       setLoading(false);
     }
   };
+
+  // Auto-generate for synthetic mode
+  useEffect(() => {
+    if (mode === "synthetic") {
+      const timer = setTimeout(() => {
+        handleRunSimulation();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    mode,
+    patternType,
+    polyDegree,
+    polyCoeffs,
+    expParams,
+    stepParams,
+    noiseStd,
+    startDate,
+    endDate,
+    interval,
+  ]);
 
   const handleDownloadCSV = () => {
     const csv = Papa.unparse(simulationData);
@@ -153,27 +242,111 @@ function App() {
         </div>
       </header>
       <div className="controls card">
-        <h2>{t("configuration.title")}</h2>
-        <div className="control-grid">
-          <div>
-            <label htmlFor="sensor-type">{t("configuration.sensorType")}</label>
-            <select
-              id="sensor-type"
-              value={sensorType}
-              onChange={(e) => setSensorType(e.target.value)}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "1rem",
+          }}
+        >
+          <h2 style={{ margin: 0 }}>{t("configuration.title")}</h2>
+          <div
+            className="mode-toggle"
+            style={{ display: "flex", alignItems: "center", gap: "1rem" }}
+          >
+            <span
+              style={{
+                fontWeight: mode === "historical" ? "bold" : "normal",
+                color: mode === "historical" ? "#007bff" : "#666",
+                cursor: "pointer",
+              }}
+              onClick={() => setMode("historical")}
             >
-              <option value="water_temperature">
-                {t("sensorTypes.water_temperature")}
-              </option>
-              <option value="salinity">{t("sensorTypes.salinity")}</option>
-              <option value="tidal_level">
-                {t("sensorTypes.tidal_level")}
-              </option>
-              <option value="anode_lifetime">
-                {t("sensorTypes.anode_lifetime")}
-              </option>
-            </select>
+              {t("mode.historical")}
+            </span>
+            <div
+              onClick={() =>
+                setMode(mode === "historical" ? "synthetic" : "historical")
+              }
+              style={{
+                width: "48px",
+                height: "24px",
+                backgroundColor: mode === "synthetic" ? "#007bff" : "#ccc",
+                borderRadius: "12px",
+                position: "relative",
+                cursor: "pointer",
+                transition: "background-color 0.3s",
+              }}
+            >
+              <div
+                style={{
+                  width: "20px",
+                  height: "20px",
+                  backgroundColor: "white",
+                  borderRadius: "50%",
+                  position: "absolute",
+                  top: "2px",
+                  left: mode === "synthetic" ? "26px" : "2px",
+                  transition: "left 0.3s",
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                }}
+              />
+            </div>
+            <span
+              style={{
+                fontWeight: mode === "synthetic" ? "bold" : "normal",
+                color: mode === "synthetic" ? "#007bff" : "#666",
+                cursor: "pointer",
+              }}
+              onClick={() => setMode("synthetic")}
+            >
+              {t("mode.synthetic")}
+            </span>
           </div>
+        </div>
+
+        <div className="control-grid">
+          {/* Slot 1: Sensor Type OR Pattern Type */}
+          <div>
+            <label htmlFor="type-select">
+              {mode === "historical"
+                ? t("configuration.sensorType")
+                : t("synthetic.patternType")}
+            </label>
+            {mode === "historical" ? (
+              <select
+                id="sensor-type"
+                value={sensorType}
+                onChange={(e) => setSensorType(e.target.value)}
+              >
+                <option value="water_temperature">
+                  {t("sensorTypes.water_temperature")}
+                </option>
+                <option value="salinity">{t("sensorTypes.salinity")}</option>
+                <option value="tidal_level">
+                  {t("sensorTypes.tidal_level")}
+                </option>
+                <option value="anode_lifetime">
+                  {t("sensorTypes.anode_lifetime")}
+                </option>
+              </select>
+            ) : (
+              <select
+                value={patternType}
+                onChange={(e) => setPatternType(e.target.value)}
+              >
+                <option value="polynomial">
+                  {t("synthetic.patterns.polynomial")}
+                </option>
+                <option value="exponential">
+                  {t("synthetic.patterns.exponential")}
+                </option>
+                <option value="step">{t("synthetic.patterns.step")}</option>
+              </select>
+            )}
+          </div>
+
           <div>
             <label htmlFor="start-date">{t("configuration.startDate")}</label>
             <input
@@ -208,7 +381,245 @@ function App() {
           </div>
         </div>
 
-        {sensorType === "anode_lifetime" && (
+        {/* Synthetic Mode Specific Controls */}
+        {mode === "synthetic" && (
+          <div
+            className="synthetic-controls"
+            style={{
+              marginTop: "1.5rem",
+              borderTop: "1px solid #eee",
+              paddingTop: "1.5rem",
+            }}
+          >
+            {patternType === "polynomial" && (
+              <div className="control-group">
+                <label>{t("synthetic.degree")}</label>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "row",
+                    gap: "0.5rem",
+                    marginBottom: "1rem",
+                  }}
+                >
+                  {[0, 1, 2].map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => setPolyDegree(d)}
+                      style={{
+                        padding: "0.25rem 0.75rem",
+                        borderRadius: "4px",
+                        border: "1px solid #ccc",
+                        background: polyDegree === d ? "#007bff" : "#fff",
+                        color: polyDegree === d ? "white" : "#333",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {d}
+                    </button>
+                  ))}
+                </div>
+                <div className="coefficients">
+                  <label>{t("synthetic.coefficients")}</label>
+                  {polyCoeffs.map((c, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        marginBottom: "0.5rem",
+                      }}
+                    >
+                      <span style={{ width: "3rem" }}>x^{polyDegree - i}</span>
+                      <input
+                        type="range"
+                        min="-10"
+                        max="10"
+                        step="0.1"
+                        value={c}
+                        onChange={(e) => {
+                          const newCoeffs = [...polyCoeffs];
+                          newCoeffs[i] = parseFloat(e.target.value);
+                          setPolyCoeffs(newCoeffs);
+                        }}
+                        style={{ flex: 1 }}
+                      />
+                      <input
+                        type="number"
+                        value={c}
+                        onChange={(e) => {
+                          const newCoeffs = [...polyCoeffs];
+                          newCoeffs[i] = parseFloat(e.target.value);
+                          setPolyCoeffs(newCoeffs);
+                        }}
+                        style={{ width: "4rem" }}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div
+                  style={{
+                    marginTop: "1rem",
+                    padding: "0.5rem",
+                    background: "#f8f9fa",
+                    borderRadius: "4px",
+                  }}
+                >
+                  <BlockMath
+                    math={`y = ${polyCoeffs
+                      .map((c, i) => `${c}x^{${polyDegree - i}}`)
+                      .join(" + ")}`}
+                  />
+                </div>
+              </div>
+            )}
+
+            {patternType === "exponential" && (
+              <div className="control-group">
+                {Object.entries(expParams).map(([key, val]) => (
+                  <div
+                    key={key}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.5rem",
+                      marginBottom: "0.5rem",
+                    }}
+                  >
+                    <span
+                      style={{ width: "4rem", textTransform: "capitalize" }}
+                    >
+                      {t(`synthetic.params.${key}`)}
+                    </span>
+                    <input
+                      type="range"
+                      min={key === "rate" ? "-2" : "-10"}
+                      max={key === "rate" ? "2" : "20"}
+                      step="0.1"
+                      value={val}
+                      onChange={(e) =>
+                        setExpParams({
+                          ...expParams,
+                          [key]: parseFloat(e.target.value),
+                        })
+                      }
+                      style={{ flex: 1 }}
+                    />
+                    <input
+                      type="number"
+                      value={val}
+                      onChange={(e) =>
+                        setExpParams({
+                          ...expParams,
+                          [key]: parseFloat(e.target.value),
+                        })
+                      }
+                      style={{ width: "4rem" }}
+                    />
+                  </div>
+                ))}
+                <div
+                  style={{
+                    marginTop: "1rem",
+                    padding: "0.5rem",
+                    background: "#f8f9fa",
+                    borderRadius: "4px",
+                  }}
+                >
+                  <BlockMath
+                    math={`y = ${expParams.scale} \\cdot e^{${expParams.rate}x} + ${expParams.offset}`}
+                  />
+                </div>
+              </div>
+            )}
+
+            {patternType === "step" && (
+              <div className="control-group">
+                {Object.entries(stepParams).map(([key, val]) => (
+                  <div
+                    key={key}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.5rem",
+                      marginBottom: "0.5rem",
+                    }}
+                  >
+                    <span
+                      style={{ width: "8rem", textTransform: "capitalize" }}
+                    >
+                      {t(`synthetic.params.${key}`)}
+                    </span>
+                    <input
+                      type="range"
+                      min={key.includes("val") ? "-10" : "0"}
+                      max={key.includes("val") ? "20" : "10"}
+                      step="0.1"
+                      value={val}
+                      onChange={(e) =>
+                        setStepParams({
+                          ...stepParams,
+                          [key]: parseFloat(e.target.value),
+                        })
+                      }
+                      style={{ flex: 1 }}
+                    />
+                    <input
+                      type="number"
+                      value={val}
+                      onChange={(e) =>
+                        setStepParams({
+                          ...stepParams,
+                          [key]: parseFloat(e.target.value),
+                        })
+                      }
+                      style={{ width: "4rem" }}
+                    />
+                  </div>
+                ))}
+                <div
+                  style={{
+                    marginTop: "1rem",
+                    padding: "0.5rem",
+                    background: "#f8f9fa",
+                    borderRadius: "4px",
+                  }}
+                >
+                  <BlockMath
+                    math={`y = ${stepParams.min_val} + \\frac{${stepParams.max_val} - ${stepParams.min_val}}{1 + e^{-${stepParams.transition_speed}(x - ${stepParams.step_position})}}`}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div
+              style={{
+                marginTop: "1rem",
+                borderTop: "1px solid #eee",
+                paddingTop: "1rem",
+              }}
+            >
+              <label>{t("synthetic.noiseLevel")}</label>
+              <div
+                style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
+              >
+                <input
+                  type="range"
+                  min="0"
+                  max="5"
+                  step="0.1"
+                  value={noiseStd}
+                  onChange={(e) => setNoiseStd(parseFloat(e.target.value))}
+                  style={{ flex: 1 }}
+                />
+                <span>{noiseStd}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {mode === "historical" && sensorType === "anode_lifetime" && (
           <div className="anode-controls">
             <h3>{t("anodeLifetime.title")}</h3>
             <div className="control-grid">
@@ -261,9 +672,11 @@ function App() {
           </div>
         )}
 
-        <button onClick={handleRunSimulation} disabled={loading}>
-          {loading ? t("buttons.generating") : t("buttons.runSimulation")}
-        </button>
+        {mode === "historical" && (
+          <button onClick={handleRunSimulation} disabled={loading}>
+            {loading ? t("buttons.generating") : t("buttons.runSimulation")}
+          </button>
+        )}
       </div>
       {error && (
         <div className="card error-card">
@@ -284,8 +697,11 @@ function App() {
           <div className="card">
             <div className="card-header">
               <h2>
-                {getSensorDisplayName(sensorType)}{" "}
-                {t("results.simulationResults")}
+                {mode === "synthetic"
+                  ? `${t("mode.synthetic")} ${t("results.simulationResults")}`
+                  : `${getSensorDisplayName(sensorType)} ${t(
+                      "results.simulationResults"
+                    )}`}
               </h2>
               <button onClick={handleDownloadCSV}>
                 {t("buttons.downloadCSV")}
@@ -305,9 +721,13 @@ function App() {
                   <Line
                     type="monotone"
                     dataKey="value"
-                    name={`${t("results.simulated")} ${getSensorDisplayName(
-                      sensorType
-                    )}`}
+                    name={
+                      mode === "synthetic"
+                        ? "Generated Data"
+                        : `${t("results.simulated")} ${getSensorDisplayName(
+                            sensorType
+                          )}`
+                    }
                     stroke="#8884d8"
                     dot={false}
                   />
@@ -315,6 +735,41 @@ function App() {
               </ResponsiveContainer>
             </div>
           </div>
+
+          {modelParameters && (
+            <div className="card">
+              <h2>{t("results.modelParameters")}</h2>
+              <ul>
+                {modelParameters.trend_coefficients && (
+                  <li>
+                    <strong>{t("results.trendCoefficients")}:</strong>
+                    <InfoTooltip
+                      text={t("results.trendCoefficientsTooltip")}
+                    />{" "}
+                    {modelParameters.trend_coefficients
+                      .map((c) => c.toFixed(4))
+                      .join(", ")}
+                  </li>
+                )}
+                {modelParameters.noise_std !== undefined && (
+                  <li>
+                    <strong>{t("results.noiseStd")}:</strong>
+                    <InfoTooltip text={t("results.noiseStdTooltip")} />{" "}
+                    {modelParameters.noise_std.toFixed(4)}
+                  </li>
+                )}
+                {modelParameters.seasonality_strength !== undefined && (
+                  <li>
+                    <strong>{t("results.seasonalityStrength")}:</strong>
+                    <InfoTooltip
+                      text={t("results.seasonalityStrengthTooltip")}
+                    />{" "}
+                    {modelParameters.seasonality_strength.toFixed(4)}
+                  </li>
+                )}
+              </ul>
+            </div>
+          )}
 
           {plots && (
             <>

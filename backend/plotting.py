@@ -34,7 +34,11 @@ def plot_decomposition(
         axes = fig.axes
 
     # Map sensor type to display names and units
-    display_names = {"water_temperature": "Water Temperature", "salinity": "Salinity", "tidal_level": "Tidal Level"}
+    display_names = {
+        "water_temperature": "Water Temperature",
+        "salinity": "Salinity",
+        "tidal_level": "Tidal Level"
+    }
     units = {"water_temperature": "°C", "salinity": "PSU", "tidal_level": "cm"}
     display_name = display_names.get(sensor_type, "Value")
     unit = units.get(sensor_type, "")
@@ -99,7 +103,11 @@ def plot_comparison(
         axes = fig.axes
 
     # Map sensor type to display names and units
-    display_names = {"water_temperature": "Water Temperature", "salinity": "Salinity", "tidal_level": "Tidal Level"}
+    display_names = {
+        "water_temperature": "Water Temperature",
+        "salinity": "Salinity",
+        "tidal_level": "Tidal Level"
+    }
     units = {"water_temperature": "°C", "salinity": "PSU", "tidal_level": "cm"}
     display_name = display_names.get(sensor_type, "Value")
     unit = units.get(sensor_type, "")
@@ -111,9 +119,11 @@ def plot_comparison(
 
     historical_doy = original.index.dayofyear
     if start_doy <= end_doy:
-        is_in_range = (historical_doy >= start_doy) & (historical_doy <= end_doy)
+        is_in_range = (historical_doy >= start_doy) & (historical_doy
+                                                       <= end_doy)
     else:  # Handles year-spanning ranges (e.g., Dec to Jan)
-        is_in_range = (historical_doy >= start_doy) | (historical_doy <= end_doy)
+        is_in_range = (historical_doy >= start_doy) | (historical_doy
+                                                       <= end_doy)
 
     filtered_original = original[is_in_range]
 
@@ -145,8 +155,7 @@ def plot_comparison(
     # --- 2. Seasonal Profile Comparison (by Day of Year) ---
     ax2 = axes[1]
     historical_seasonal = filtered_original.groupby(
-        filtered_original.index.dayofyear
-    ).agg(["mean", "std"])
+        filtered_original.index.dayofyear).agg(["mean", "std"])
     simulated_seasonal = simulated.groupby(simulated.index.dayofyear).mean()
 
     ax2.plot(
@@ -179,9 +188,8 @@ def plot_comparison(
 
     # --- 3. Daily Profile Comparison (by Hour of Day) ---
     ax3 = axes[2]
-    historical_daily = filtered_original.groupby(filtered_original.index.hour).agg(
-        ["mean", "std"]
-    )
+    historical_daily = filtered_original.groupby(
+        filtered_original.index.hour).agg(["mean", "std"])
     simulated_daily = simulated.groupby(simulated.index.hour).mean()
 
     ax3.plot(
@@ -220,3 +228,68 @@ def plot_comparison(
         plt.savefig(plot_path, dpi=300)
         print(f"Comparison plot saved to: {plot_path}")
         plt.close(fig)
+
+
+def plot_simulated_decomposition(
+    components: pd.DataFrame,
+    sensor_type: str,
+    fig: Optional[plt.Figure] = None,
+):
+    """Plots the components of the simulated data.
+
+    Args:
+        components: DataFrame containing 'Trend', 'Seasonality', 'Noise', and 'Simulated' columns.
+        sensor_type: The type of sensor data being plotted.
+        fig: Optional. A matplotlib Figure to draw on.
+    """
+    if fig is None:
+        fig, axes = plt.subplots(4, 1, figsize=(15, 12), sharex=True)
+    else:
+        axes = fig.axes
+
+    # Map sensor type to display names and units
+    display_names = {
+        "water_temperature": "Water Temperature",
+        "salinity": "Salinity",
+        "tidal_level": "Tidal Level"
+    }
+    units = {"water_temperature": "°C", "salinity": "PSU", "tidal_level": "cm"}
+    display_name = display_names.get(sensor_type, "Value")
+    unit = units.get(sensor_type, "")
+
+    fig.suptitle(f"Simulated {display_name} Decomposition", fontsize=18)
+
+    # Ensure columns exist
+    plot_data = {
+        "Simulated": components.get("Simulated"),
+        "Trend": components.get("Trend"),
+        "Seasonality": components.get("Seasonality"),
+        "Noise": components.get("Noise"),
+    }
+
+    colors = ["cornflowerblue", "tomato", "forestgreen", "gray"]
+
+    for (name, data), color, ax in zip(plot_data.items(), colors, axes):
+        if data is None:
+            continue
+
+        plot_kwargs = {"color": color, "legend": False}
+        if name == "Noise":
+            plot_kwargs.update({
+                "linestyle": "None",
+                "marker": ".",
+                "markersize": 2
+            })
+
+        data.plot(ax=ax, **plot_kwargs)
+
+        y_label = name
+        if name == "Simulated":
+            y_label = f"{name} ({unit})"
+
+        ax.set_ylabel(y_label)
+        ax.set_title(f"{name} Component", fontsize=12)
+        ax.grid(True, linestyle="--", alpha=0.6)
+
+    axes[-1].set_xlabel("Date")
+    plt.tight_layout(rect=[0, 0.03, 1, 0.96])

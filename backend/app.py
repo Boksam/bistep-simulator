@@ -14,12 +14,13 @@ import yaml
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pandas import Timedelta
-from plotting import plot_comparison, plot_decomposition
+from plotting import plot_comparison, plot_decomposition, plot_simulated_decomposition
 from pydantic import BaseModel, Field
 from salinity import SalinitySimulator
 from tidal_level import TidalLevelSimulator
 from water_temperature import WaterTemperatureSimulator
 from anode_lifetime import simulate_anode_lifetime
+from synthetic_generator import SyntheticDataGenerator
 
 # --- Configuration Loading ---
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
@@ -67,6 +68,19 @@ app.add_middleware(
 
 
 # --- Pydantic Models ---
+class ParameterOverrides(BaseModel):
+    """User-defined overrides for simulation parameters."""
+
+    trend_multiplier: Optional[float] = Field(
+        1.0, description="Multiplier for the trend component.")
+    trend_offset: Optional[float] = Field(
+        0.0, description="Additive offset for the trend component.")
+    seasonality_multiplier: Optional[float] = Field(
+        1.0, description="Multiplier for the seasonality component.")
+    noise_multiplier: Optional[float] = Field(
+        1.0, description="Multiplier for the noise component.")
+
+
 class SimulationRequest(BaseModel):
     """Request model for simulation endpoints."""
 
@@ -77,6 +91,7 @@ class SimulationRequest(BaseModel):
         description=
         "Data aggregation interval (e.g., '1h', '12h', '1d', '7d').",
     )
+    overrides: Optional[ParameterOverrides] = None
 
 
 class PlotResponse(BaseModel):
@@ -86,11 +101,40 @@ class PlotResponse(BaseModel):
     comparison: str
 
 
+class SyntheticGenerationRequest(BaseModel):
+    """Request model for synthetic data generation."""
+
+    pattern_type: str = Field(...,
+                              description="polynomial, exponential, or step")
+    parameters: Dict[str, float] = Field(
+        ...,
+        description=
+        "Parameters for the pattern. For polynomial, use keys like 'c0', 'c1', 'c2' or pass a list in a separate field if needed, but here we will map dict keys."
+    )
+    # Note: Pydantic Dict[str, float] is simple. For polynomial coefficients which is a list,
+    # we might need to handle it carefully. Let's assume the frontend sends "c0", "c1", "c2" etc.
+    # Or we can use a generic Dict[str, Any]
+    parameters: Dict[str, float | List[float]] = Field(
+        ..., description="Parameters for the pattern")
+
+    start_date: str
+    end_date: str
+    interval: Optional[str] = "1h"
+
+
+class ModelParameters(BaseModel):
+    trend_coefficients: Optional[List[float]] = None
+    noise_std: Optional[float] = None
+    noise_type: Optional[str] = None
+    seasonality_strength: Optional[float] = None
+
+
 class SimulationResponse(BaseModel):
     """Response model for simulation data and plots."""
 
     simulation_data: List[Dict]
     plots: PlotResponse
+    model_parameters: Optional[ModelParameters] = None
 
 
 # --- Application State ---
@@ -242,7 +286,12 @@ async def run_anode_lifetime_simulation(
         )
 
         print("Anode lifetime simulation complete.")
-        return {"simulation_data": json_data, "formula": formula}
+        return {
+            "data": result_df.to_dict(orient="records"),
+            "plots": {},
+            "model_parameters":
+            {},  # Anode simulation doesn't return standard model params yet
+        }
     except Exception as e:
         print(f"An error occurred during anode lifetime simulation: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -288,10 +337,11 @@ async def run_simulation(sensor_name: str, request: SimulationRequest):
     )
 
     # 1. Generate simulated data at the requested interval
-    simulated_series = simulator.simulate(
+    simulated_series, components = simulator.simulate(
         start_date=request.start_date,
         end_date=request.end_date,
         freq=request.interval,  # Pass the interval string directly
+        overrides=request.overrides.dict() if request.overrides else None,
     )
 
     # 2. Resample original data for the comparison plot
@@ -303,15 +353,12 @@ async def run_simulation(sensor_name: str, request: SimulationRequest):
     json_data = result_df.to_dict(orient="records")
 
     # 3. Generate plots in memory
-    # Decomposition Plot (on original hourly data)
-    if simulator.full_decomposition_result:
-        fig_decomp, _ = plt.subplots(4, 1, figsize=(10, 8), sharex=True)
-        plot_decomposition(simulator.full_decomposition_result,
-                           sensor_type=sensor_name,
-                           fig=fig_decomp)
-        b64_decomposition = fig_to_base64(fig_decomp)
-    else:
-        b64_decomposition = ""
+    # Decomposition Plot (on SIMULATED data components)
+    fig_decomp, _ = plt.subplots(4, 1, figsize=(10, 8), sharex=True)
+    plot_simulated_decomposition(components,
+                                 sensor_type=sensor_name,
+                                 fig=fig_decomp)
+    b64_decomposition = fig_to_base64(fig_decomp)
 
     # Comparison Plot (on resampled data)
     fig_comp, _ = plt.subplots(3, 1, figsize=(12, 18))
@@ -322,10 +369,37 @@ async def run_simulation(sensor_name: str, request: SimulationRequest):
     b64_comparison = fig_to_base64(fig_comp)
 
     print("Simulation and plot generation complete.")
+
+    # Get model parameters
+    model_params = simulator.get_model_parameters(
+        overrides=request.overrides.dict() if request.overrides else None)
+
     return {
         "simulation_data": json_data,
         "plots": {
             "decomposition": b64_decomposition,
             "comparison": b64_comparison
         },
+        "model_parameters": model_params,
     }
+
+
+@app.post("/generate-synthetic")
+async def generate_synthetic_data(request: SyntheticGenerationRequest):
+    """Generates synthetic data based on mathematical patterns."""
+    generator = SyntheticDataGenerator()
+    try:
+        # Convert parameters if needed.
+        # The generator expects specific keys.
+        df = generator.generate(request.pattern_type, request.parameters,
+                                request.start_date, request.end_date,
+                                request.interval)
+        return df.to_dict(orient="records")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")

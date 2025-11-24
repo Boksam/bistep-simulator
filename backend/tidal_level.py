@@ -5,7 +5,7 @@ for analyzing historical tidal level data and generating future synthetic
 data based on the analysis.
 """
 
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -30,7 +30,8 @@ class TidalLevelSimulator:
         self.daily_seasonal_pattern: Optional[np.ndarray] = None
         self.noise_model: Optional[Dict] = None
         self.original_data: Optional[pd.Series] = None
-        self.full_decomposition_result: Optional[seasonal.DecomposeResult] = None
+        self.full_decomposition_result: Optional[
+            seasonal.DecomposeResult] = None
 
     def _handle_outliers(
         self,
@@ -54,10 +55,11 @@ class TidalLevelSimulator:
         print("Detecting and handling outliers...")
         series_no_outliers = series.copy()
 
-        rolling_median = series.rolling(
-            window=window, center=True, min_periods=1
-        ).median()
-        rolling_std = series.rolling(window=window, center=True, min_periods=1).std()
+        rolling_median = series.rolling(window=window,
+                                        center=True,
+                                        min_periods=1).median()
+        rolling_std = series.rolling(window=window, center=True,
+                                     min_periods=1).std()
         upper_bound = rolling_median + (sigma * rolling_std)
         lower_bound = rolling_median - (sigma * rolling_std)
         rolling_outliers = (series < lower_bound) | (series > upper_bound)
@@ -91,15 +93,15 @@ class TidalLevelSimulator:
         print(f"Initial missing values: {series.isnull().sum()}")
 
         series_no_outliers = self._handle_outliers(series)
-        print(
-            "Missing values after outlier removal: "
-            f"{series_no_outliers.isnull().sum()}"
-        )
+        print("Missing values after outlier removal: "
+              f"{series_no_outliers.isnull().sum()}")
 
-        series_filled = series_no_outliers.interpolate(method="linear", limit=24 * 3)
+        series_filled = series_no_outliers.interpolate(method="linear",
+                                                       limit=24 * 3)
         if series_filled.isnull().sum() > 0:
             for i in range(1, 8):
-                series_filled.fillna(series_filled.shift(24 * 7 * i), inplace=True)
+                series_filled.fillna(series_filled.shift(24 * 7 * i),
+                                     inplace=True)
                 if series_filled.isnull().sum() == 0:
                     break
         series_filled.fillna(method="bfill", inplace=True)
@@ -109,11 +111,9 @@ class TidalLevelSimulator:
         print(f"Preprocessed data points: {len(self.original_data)}")
         return self.original_data
 
-    def _decompose_with_stl(
-        self,
-        series: pd.Series,
-        period: int = 365
-    ) -> seasonal.DecomposeResult:
+    def _decompose_with_stl(self,
+                            series: pd.Series,
+                            period: int = 365) -> seasonal.DecomposeResult:
         """Performs time series decomposition using STL.
 
         Args:
@@ -132,12 +132,10 @@ class TidalLevelSimulator:
         stl = seasonal.STL(daily_series, period=period, robust=True)
         return stl.fit()
 
-    def model_yearly_seasonality(
-        self,
-        series: pd.Series,
-        period: int = 365,
-        model: str = "additive"
-    ) -> pd.Series:
+    def model_yearly_seasonality(self,
+                                 series: pd.Series,
+                                 period: int = 365,
+                                 model: str = "additive") -> pd.Series:
         """Models the yearly seasonality and removes it from the series.
 
         Args:
@@ -148,24 +146,24 @@ class TidalLevelSimulator:
         Returns:
             A time series with the yearly seasonal component removed.
         """
-        print(f"Modeling yearly seasonality ({period}-day period, {model} model)...")
+        print(
+            f"Modeling yearly seasonality ({period}-day period, {model} model)..."
+        )
         yearly_decomposition = self._decompose_with_stl(series, period)
         self.full_decomposition_result = yearly_decomposition
 
         pattern = yearly_decomposition.seasonal.dropna()
-        self.yearly_seasonal_pattern = (
-            pattern.groupby(pattern.index.dayofyear).median().to_dict()
-        )
+        self.yearly_seasonal_pattern = (pattern.groupby(
+            pattern.index.dayofyear).median().to_dict())
         if 366 not in self.yearly_seasonal_pattern:
-            self.yearly_seasonal_pattern[366] = self.yearly_seasonal_pattern.get(1, 0)
+            self.yearly_seasonal_pattern[
+                366] = self.yearly_seasonal_pattern.get(1, 0)
 
         if model == "additive":
             return series - series.index.map(
-                lambda dt: self.yearly_seasonal_pattern.get(dt.dayofyear, 0)
-            )
+                lambda dt: self.yearly_seasonal_pattern.get(dt.dayofyear, 0))
         return series / series.index.map(
-            lambda dt: self.yearly_seasonal_pattern.get(dt.dayofyear, 1)
-        )
+            lambda dt: self.yearly_seasonal_pattern.get(dt.dayofyear, 1))
 
     def model_trend(self, trend_component: pd.Series, degree: int = 2):
         """Models the trend using polynomial regression.
@@ -188,12 +186,10 @@ class TidalLevelSimulator:
         coeffs = np.polyfit(x_numeric, y_values, deg=degree)
         self.trend_model = np.poly1d(coeffs)
 
-    def model_daily_seasonality_and_noise(
-        self,
-        series: pd.Series,
-        period: int = 24,
-        model: str = "additive"
-    ):
+    def model_daily_seasonality_and_noise(self,
+                                          series: pd.Series,
+                                          period: int = 24,
+                                          model: str = "additive"):
         """Models daily seasonality and the remaining noise.
 
         Args:
@@ -201,15 +197,18 @@ class TidalLevelSimulator:
             period: The daily seasonal period in hours.
             model: The decomposition model type.
         """
-        print(f"Modeling daily seasonality and noise ({period}-hour period)...")
-        daily_decomposition = seasonal.seasonal_decompose(
-            series, model=model, period=period
-        )
+        print(
+            f"Modeling daily seasonality and noise ({period}-hour period)...")
+        daily_decomposition = seasonal.seasonal_decompose(series,
+                                                          model=model,
+                                                          period=period)
         seasonal_component = daily_decomposition.seasonal.dropna()
         self.daily_seasonal_pattern = seasonal_component.iloc[:period].values
         self._model_noise_ar(daily_decomposition.resid)
 
-    def _model_noise_ar(self, residual_component: pd.Series, max_lags: int = 10):
+    def _model_noise_ar(self,
+                        residual_component: pd.Series,
+                        max_lags: int = 10):
         """Models the noise using an Autoregressive (AR) model.
 
         Args:
@@ -229,7 +228,9 @@ class TidalLevelSimulator:
                 continue
 
         if best_lag == 0:
-            print("  - Could not find optimal AR lag. Using normal distribution.")
+            print(
+                "  - Could not find optimal AR lag. Using normal distribution."
+            )
             self._model_noise_normal(residual_component)
             return
 
@@ -259,21 +260,16 @@ class TidalLevelSimulator:
         return self.trend_model(x_numeric)
 
     def generate_yearly_seasonality(
-        self,
-        datetime_range: pd.DatetimeIndex
-    ) -> np.ndarray:
+            self, datetime_range: pd.DatetimeIndex) -> np.ndarray:
         """Generates yearly seasonality values for a given date range."""
         if self.yearly_seasonal_pattern is None:
             raise ValueError("Yearly seasonality model is not trained.")
         day_of_year = datetime_range.dayofyear
         return np.array(
-            [self.yearly_seasonal_pattern.get(doy, 0) for doy in day_of_year]
-        )
+            [self.yearly_seasonal_pattern.get(doy, 0) for doy in day_of_year])
 
     def generate_daily_seasonality(
-        self,
-        datetime_range: pd.DatetimeIndex
-    ) -> np.ndarray:
+            self, datetime_range: pd.DatetimeIndex) -> np.ndarray:
         """Generates daily seasonality values for a given date range."""
         if self.daily_seasonal_pattern is None:
             raise ValueError("Daily seasonality model is not trained.")
@@ -281,7 +277,9 @@ class TidalLevelSimulator:
         indices = datetime_range.hour % period
         return self.daily_seasonal_pattern[indices]
 
-    def generate_noise(self, n_samples: int, seed: Optional[int] = None) -> np.ndarray:
+    def generate_noise(self,
+                       n_samples: int,
+                       seed: Optional[int] = None) -> np.ndarray:
         """Generates noise using the trained AR or normal model."""
         if self.noise_model is None:
             raise ValueError("Noise model is not trained.")
@@ -294,7 +292,7 @@ class TidalLevelSimulator:
             std_resid = self.noise_model["std_resid"]
             noise = np.zeros(n_samples + lags)
             for t in range(lags, n_samples + lags):
-                ar_component = np.dot(params[1:], noise[t - lags : t][::-1])
+                ar_component = np.dot(params[1:], noise[t - lags:t][::-1])
                 random_shock = np.random.normal(0, std_resid)
                 noise[t] = params[0] + ar_component + random_shock
             return noise[lags:]
@@ -311,7 +309,8 @@ class TidalLevelSimulator:
         end_date: str,
         freq: str = "H",
         seed: Optional[int] = None,
-    ) -> pd.Series:
+        overrides: Optional[Dict] = None,
+    ) -> Tuple[pd.Series, pd.DataFrame]:
         """Generates synthetic tidal level data for a given period.
 
         Args:
@@ -319,17 +318,47 @@ class TidalLevelSimulator:
             end_date: The end date for the simulation (e.g., "2023-12-31").
             freq: The frequency of the generated data (default: "H" for hourly).
             seed: A random seed for reproducibility.
+            overrides: Optional dictionary of parameter overrides.
 
         Returns:
-            A pandas Series containing the simulated tidal level data.
+            A tuple containing:
+            - A pandas Series containing the simulated tidal level data.
+            - A pandas DataFrame containing the components (Trend, Seasonality, Noise).
         """
-        datetime_range = pd.date_range(start=start_date, end=end_date, freq=freq)
+        datetime_range = pd.date_range(start=start_date,
+                                       end=end_date,
+                                       freq=freq)
         trend = self.generate_trend(datetime_range)
         yearly = self.generate_yearly_seasonality(datetime_range)
         daily = self.generate_daily_seasonality(datetime_range)
         noise = self.generate_noise(len(datetime_range), seed=seed)
+
+        # Apply overrides
+        if overrides:
+            if overrides.get("trend_multiplier") is not None:
+                trend *= overrides["trend_multiplier"]
+            if overrides.get("trend_offset") is not None:
+                trend += overrides["trend_offset"]
+            if overrides.get("seasonality_multiplier") is not None:
+                yearly *= overrides["seasonality_multiplier"]
+                daily *= overrides["seasonality_multiplier"]
+            if overrides.get("noise_multiplier") is not None:
+                noise *= overrides["noise_multiplier"]
+
         simulated_level = trend + yearly + daily + noise
-        return pd.Series(simulated_level, index=datetime_range, name="simulated_tidal_level")
+
+        components = pd.DataFrame(
+            {
+                "Trend": trend,
+                "Seasonality": yearly + daily,
+                "Noise": noise,
+                "Simulated": simulated_level
+            },
+            index=datetime_range)
+
+        return pd.Series(simulated_level,
+                         index=datetime_range,
+                         name="simulated_tidal_level"), components
 
     def run_analysis(
         self,
@@ -352,17 +381,53 @@ class TidalLevelSimulator:
 
         print("\n2. Modeling yearly seasonality...")
         series_no_yearly = self.model_yearly_seasonality(
-            series, period=365, model=decomposition_model
-        )
+            series, period=365, model=decomposition_model)
 
         print("\n3. Modeling trend...")
         if self.full_decomposition_result:
-            self.model_trend(self.full_decomposition_result.trend, degree=trend_degree)
+            self.model_trend(self.full_decomposition_result.trend,
+                             degree=trend_degree)
 
         print("\n4. Modeling daily seasonality and noise...")
-        self.model_daily_seasonality_and_noise(
-            series_no_yearly, period=24, model=decomposition_model
-        )
+        self.model_daily_seasonality_and_noise(series_no_yearly,
+                                               period=24,
+                                               model=decomposition_model)
 
         print("\nAnalysis complete.")
         return self
+
+    def get_model_parameters(self, overrides: Optional[Dict] = None) -> Dict:
+        """Returns the internal parameters of the trained model, optionally adjusted by overrides."""
+        params = {}
+
+        # 1. Trend (Polynomial coefficients)
+        if self.trend_model is not None:
+            coeffs = self.trend_model.coefficients.copy()
+            if overrides:
+                if overrides.get("trend_multiplier") is not None:
+                    coeffs *= overrides["trend_multiplier"]
+                if overrides.get("trend_offset") is not None:
+                    # Add offset to the constant term (last element)
+                    coeffs[-1] += overrides["trend_offset"]
+            params["trend_coefficients"] = coeffs.tolist()
+
+        # 2. Noise
+        if self.noise_model:
+            params["noise_type"] = self.noise_model.get("type", "unknown")
+            params["noise_std"] = self.noise_model.get("std", 0.0)
+            if params["noise_type"] == "ar":
+                params["noise_std"] = self.noise_model.get("std_resid", 0.0)
+
+            if overrides and overrides.get("noise_multiplier") is not None:
+                params["noise_std"] *= overrides["noise_multiplier"]
+
+        # 3. Seasonality (Example: Max amplitude)
+        if self.yearly_seasonal_pattern:
+            values = list(self.yearly_seasonal_pattern.values())
+            strength = max(values) - min(values)
+            if overrides and overrides.get(
+                    "seasonality_multiplier") is not None:
+                strength *= overrides["seasonality_multiplier"]
+            params["seasonality_strength"] = strength
+
+        return params
