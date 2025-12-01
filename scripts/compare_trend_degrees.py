@@ -3,6 +3,15 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from statsmodels.tsa.seasonal import STL
 from sklearn.metrics import mean_squared_error
+from scipy.optimize import curve_fit
+
+
+def exponential_model(x, a, b, c):
+    return a * np.exp(np.clip(b * x, -100, 100)) + c
+
+
+def sigmoid_model(x, L, x0, k, b):
+    return L / (1 + np.exp(-np.clip(k * (x - x0), -100, 100))) + b
 
 
 def generate_pattern(pattern_type, length=200):
@@ -57,51 +66,123 @@ def analyze_trend_degrees(pattern_name, series):
     model_15 = np.poly1d(coeffs_15)
     trend_15 = model_15(x_future)
 
+    # Fit Exponential
+    try:
+        # Initial guess: a=1, b=0.01 (slow growth), c=min
+        p0_exp = [1, 0.01, np.min(stl_trend)]
+        popt_exp, _ = curve_fit(exponential_model,
+                                x_numeric,
+                                stl_trend,
+                                p0=p0_exp,
+                                maxfev=10000)
+        trend_exp = exponential_model(x_future, *popt_exp)
+        rmse_exp = np.sqrt(
+            mean_squared_error(stl_trend, trend_exp[:len(series)]))
+    except Exception as e:
+        print(f"Exponential fit failed: {e}")
+        trend_exp = None
+        rmse_exp = np.nan
+
+    # Fit Sigmoid
+    try:
+        # Initial guess: L=range, x0=mid, k=0.1, b=min
+        p0_sig = [
+            np.max(stl_trend) - np.min(stl_trend),
+            np.median(x_numeric), 0.1,
+            np.min(stl_trend)
+        ]
+        popt_sig, _ = curve_fit(sigmoid_model,
+                                x_numeric,
+                                stl_trend,
+                                p0=p0_sig,
+                                maxfev=10000)
+        trend_sig = sigmoid_model(x_future, *popt_sig)
+        rmse_sig = np.sqrt(
+            mean_squared_error(stl_trend, trend_sig[:len(series)]))
+    except Exception as e:
+        print(f"Sigmoid fit failed: {e}")
+        trend_sig = None
+        rmse_sig = np.nan
+
     # 3. Calculate Errors (RMSE vs STL Trend on TRAINING data only)
     rmse_1 = np.sqrt(mean_squared_error(stl_trend, trend_1[:len(series)]))
     rmse_2 = np.sqrt(mean_squared_error(stl_trend, trend_2[:len(series)]))
     rmse_15 = np.sqrt(mean_squared_error(stl_trend, trend_15[:len(series)]))
 
-    print(f"{'Degree':<15} | {'RMSE (Fit)':<12} | {'Description'}")
+    print(f"{'Model':<15} | {'RMSE (Fit)':<12} | {'Description'}")
     print("-" * 50)
-    print(f"{'1 (Linear)':<15} | {rmse_1:.4f}       | Stable but underfits")
-    print(f"{'2 (Quad)':<15} | {rmse_2:.4f}       | Good balance")
-    print(f"{'15 (High)':<15} | {rmse_15:.4f}       | Overfits & Unstable")
+    print(f"{'Poly Deg 1':<15} | {rmse_1:.4f}       | Linear")
+    print(f"{'Poly Deg 2':<15} | {rmse_2:.4f}       | Quadratic")
+    print(f"{'Poly Deg 15':<15} | {rmse_15:.4f}       | High Degree Poly")
+    if trend_exp is not None:
+        print(
+            f"{'Exponential':<15} | {rmse_exp:.4f}       | Exponential Growth/Decay"
+        )
+    if trend_sig is not None:
+        print(f"{'Sigmoid':<15} | {rmse_sig:.4f}       | Logistic/S-curve")
 
     # 4. Plot
-    plt.figure(figsize=(12, 6))
+    plt.figure(figsize=(14, 8))  # Increased figure size for better visibility
 
     # Plot original Data
     plt.plot(np.arange(len(series)),
              series,
-             label="Original Data (Noisy)",
-             color="gray",
-             alpha=0.3)
+             label="Original Data",
+             color="steelblue",
+             alpha=0.6,
+             linewidth=3)
 
     # Plot original STL Trend
     plt.plot(np.arange(len(series)),
              stl_trend,
-             label="STL Extracted Trend (Target)",
+             label="STL Trend (Target)",
              color="black",
-             linewidth=3,
-             alpha=0.5)
+             linewidth=1.5,
+             alpha=0.8,
+             zorder=5)  # Bring to front
 
-    # Plot Fits
+    # Plot Fits with distinct styles
     plt.plot(x_future,
              trend_1,
-             label=f"Degree 1 (RMSE={rmse_1:.1f})",
-             linestyle="--")
+             label=f"Poly Deg 1 (RMSE={rmse_1:.1f})",
+             linestyle="--",
+             color="navy",
+             linewidth=1.5,
+             alpha=0.8)
+
     plt.plot(x_future,
              trend_2,
-             label=f"Degree 2 (RMSE={rmse_2:.1f})",
-             linestyle="--")
+             label=f"Poly Deg 2 (RMSE={rmse_2:.1f})",
+             linestyle="--",
+             color="darkorange",
+             linewidth=1.5,
+             alpha=0.8)
+
     plt.plot(x_future,
              trend_15,
-             label=f"Degree 15 (RMSE={rmse_15:.1f})",
-             linestyle="-",
-             color="red")
+             label=f"Poly Deg 15 (RMSE={rmse_15:.1f})",
+             linestyle="--",
+             color="red",
+             linewidth=1.5,
+             alpha=0.8)
 
-    # Mark the "Future" zone
+    if trend_exp is not None:
+        plt.plot(x_future,
+                 trend_exp,
+                 label=f"Exponential (RMSE={rmse_exp:.1f})",
+                 linestyle="--",
+                 color="forestgreen",
+                 linewidth=1.5,
+                 alpha=0.8)
+
+    if trend_sig is not None:
+        plt.plot(x_future,
+                 trend_sig,
+                 label=f"Sigmoid (RMSE={rmse_sig:.1f})",
+                 linestyle="--",
+                 color="magenta",
+                 linewidth=1.5,
+                 alpha=0.8)  # Mark the "Future" zone
     plt.axvline(x=len(series),
                 color='gray',
                 linestyle=':',
