@@ -287,10 +287,8 @@ async def run_anode_lifetime_simulation(
 
         print("Anode lifetime simulation complete.")
         return {
-            "data": result_df.to_dict(orient="records"),
-            "plots": {},
-            "model_parameters":
-            {},  # Anode simulation doesn't return standard model params yet
+            "simulation_data": result_df.to_dict(orient="records"),
+            "formula": formula,
         }
     except Exception as e:
         print(f"An error occurred during anode lifetime simulation: {e}")

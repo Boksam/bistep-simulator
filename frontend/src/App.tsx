@@ -130,7 +130,7 @@ function App() {
             interval: interval,
           }
         );
-        setSimulationData(response.data);
+        setSimulationData(response.data || []);
       } else {
         if (sensorType === "anode_lifetime") {
           response = await axios.post(
@@ -144,7 +144,7 @@ function App() {
               noise_level: anodeNoiseLevel,
             }
           );
-          setSimulationData(response.data.simulation_data);
+          setSimulationData(response.data.simulation_data || []);
           setFormula(response.data.formula);
           setPlots(null); // Anode lifetime does not have plots
         } else {
@@ -156,7 +156,7 @@ function App() {
               interval: interval,
             }
           );
-          setSimulationData(response.data.simulation_data);
+          setSimulationData(response.data.simulation_data || []);
           setPlots(response.data.plots);
           setModelParameters(response.data.model_parameters);
         }
